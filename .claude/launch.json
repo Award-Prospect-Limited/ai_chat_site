@@ -1,0 +1,6 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "ai-chat-site", "runtimeExecutable": "bash", "runtimeArgs": ["scripts/dev_local.sh"], "port": 49193 }
+  ]
+}

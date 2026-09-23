@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}管理后台{% endblock %}
+{% block head %}
+  <script defer src="{{ url_for('static', filename='js/admin.js') }}?v=2"></script>
+{% endblock %}
+
+{% block content %}
+<div class="admin-wrap">
+  <div class="admin-title">
+    <h4>管理后台</h4>
+    <span>用户 · 用量 · 邀请码</span>
+    <a class="btn btn-sm btn-ghost ms-auto" href="/chat"><i class="fa-solid fa-arrow-left me-1"></i>回到聊天</a>
+  </div>
+
+  <div class="admin-cards" id="cards"></div>
+
+  <div class="admin-grid">
+    <div class="admin-panel">
+      <h6>近 30 天回复量 <span class="mono" style="color: var(--muted)" id="dailyTotal"></span></h6>
+      <div class="bars" id="bars"></div>
+      <div class="bars-x" id="barsX"></div>
+    </div>
+    <div class="admin-panel">
+      <h6>本月各模型 Token</h6>
+      <div id="byModel"></div>
+    </div>
+  </div>
+
+  <div class="admin-panel">
+    <h6>用户</h6>
+    <div class="admin-scroll">
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>用户</th><th>邮箱</th><th>注册</th><th>最近使用</th>
+            <th class="num">对话</th><th class="num">提问</th><th class="num">本周</th><th class="num">本月</th><th class="num">累计</th>
+            <th>状态</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="users"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="admin-panel">
+    <h6>
+      邀请码
+      <span class="d-flex gap-2 align-items-center">
+        <select class="form-select form-select-sm" id="inviteCount" style="width: 80px">
+          <option>1</option><option>3</option><option selected>5</option><option>10</option>
+        </select>
+        <button class="btn btn-sm btn-accent" id="btnInvite" type="button"><i class="fa-solid fa-plus me-1"></i>生成</button>
+      </span>
+    </h6>
+    <div class="admin-scroll">
+      <table class="admin-table">
+        <thead><tr><th>邀请码</th><th>创建时间</th><th>状态</th><th>使用者</th><th></th></tr></thead>
+        <tbody id="invites"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,24 +1,144 @@
 {% extends "base.html" %}
 {% block title %}聊天{% endblock %}
+{% block body_class %}app-page app-full{% endblock %}
 
 {% block head %}
-  <script defer src="{{ url_for('static', filename='js/chat.js') }}"></script>
+  <link href="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css" rel="stylesheet" />
+  <link id="hljsLight" href="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.11.1/styles/github.min.css" rel="stylesheet" />
+  <link id="hljsDark" href="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.11.1/styles/github-dark.min.css" rel="stylesheet" disabled />
+  <script defer src="https://cdn.jsdelivr.net/npm/marked@15.0.12/marked.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/dompurify@3.2.6/dist/purify.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.11.1/highlight.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js"></script>
+  <script defer src="{{ url_for('static', filename='js/markdown.js') }}?v=2"></script>
+  <script defer src="{{ url_for('static', filename='js/chat.js') }}?v=2"></script>
+{% endblock %}
+
+{% block nav_left %}
+  <button class="icon-btn d-lg-none" id="btnSidebar" type="button" title="对话列表"><i class="fa-solid fa-bars"></i></button>
 {% endblock %}
 
 {% block content %}
-<div
-  id="chatApp"
-  data-current-conversation-id="{{ current_conversation_id }}"
-  data-default-model="{{ model_name }}"
-  data-allowed-models='{{ allowed_models | tojson }}'
-  data-max-files="{{ upload_max_files }}"
->
-  <div class="row g-3 chat-shell">
-    <div class="col-12 col-lg-3 h-100"><div class="card shadow-sm chat-sidebar h-100 d-flex flex-column"><div class="card-header bg-white d-flex align-items-center justify-content-between"><div class="fw-semibold">对话</div><button class="btn btn-sm btn-primary d-inline-flex align-items-center gap-1" id="btnNewConversation"><i class="fa-solid fa-plus"></i><span>新建</span></button></div><div class="list-group list-group-flush chat-conv-list flex-grow-1" id="conversationList">{% for c in conversations %}<button type="button" class="list-group-item list-group-item-action d-flex align-items-center justify-content-between {% if c.id == current_conversation_id %}active{% endif %}" data-conversation-id="{{ c.id }}"><span class="text-truncate me-2">{{ c.title }}</span><span class="d-flex gap-2 align-items-center"><i class="fa-solid fa-pen-to-square chat-conv-action" data-action="rename" title="重命名"></i><i class="fa-solid fa-trash chat-conv-action" data-action="delete" title="删除"></i></span></button>{% endfor %}</div><div class="card-footer bg-white token-footer"><div class="token-widget"><div class="token-widget-head"><i class="fa-solid fa-chart-simple me-2"></i><span>Token 统计</span></div><div class="token-grid"><div class="token-item"><div class="k">本对话</div><div class="v" id="tokChat">0</div></div><div class="token-item"><div class="k">本周</div><div class="v" id="tokWeek">0</div></div><div class="token-item"><div class="k">本月</div><div class="v" id="tokMonth">0</div></div><div class="token-item"><div class="k">累计</div><div class="v" id="tokTotal">0</div></div></div></div></div></div></div>
-    <div class="col-12 col-lg-9 h-100">
-      <div class="chat-main-topbar mb-2"><div class="d-flex align-items-center gap-2 flex-wrap"><span class="text-muted small">模型</span><select class="form-select form-select-sm" style="width: 220px" id="modelSelect"></select><div class="form-check form-switch m-0"><input class="form-check-input" type="checkbox" role="switch" id="memoryToggle" {% if memory_enabled_default %}checked{% endif %} /><label class="form-check-label small text-muted" for="memoryToggle">记忆</label></div></div><div class="d-flex align-items-center gap-2"><button class="btn btn-outline-danger btn-sm" id="btnClear"><i class="fa-solid fa-broom me-1"></i>清空</button></div></div>
-      <div class="card shadow-sm chat-card"><div class="card-header bg-white border-bottom d-flex align-items-center justify-content-between"><h6 class="mb-0 text-primary"><i class="fa-solid fa-robot me-2"></i>AI ENGINE</h6><span class="text-muted small text-truncate" style="max-width: 55%" id="currentConversationTitle"></span></div><div class="card-body overflow-auto" style="background: linear-gradient(180deg, rgba(255,255,255,.55) 0%, rgba(248,250,252,.35) 100%);" id="chatBox"></div><div class="card-footer bg-white"><div class="d-flex gap-2 align-items-stretch flex-nowrap chat-input-row"><button class="btn upload-btn d-inline-flex align-items-center justify-content-center flex-shrink-0" id="btnAttach" type="button" title="上传文件"><i class="fa-solid fa-paperclip"></i></button><textarea class="form-control chat-input" id="userInput" placeholder="输入问题或上传文件..." autocomplete="off" rows="5"></textarea><button class="btn btn-primary d-inline-flex align-items-center gap-1 flex-shrink-0" id="btnSend"><i class="fa-solid fa-paper-plane"></i><span>发送</span></button><input class="d-none" type="file" id="fileInput" multiple accept=".txt,.md,.csv,.json,.log,.pdf,.docx,.png,.jpg,.jpeg,.webp" /></div><div class="file-list" id="fileList"></div><div class="text-muted small text-truncate mt-2" id="fileHint"></div><div class="text-muted small text-truncate mt-1" id="hint"></div></div></div>
+<script type="application/json" id="bootData">{{ boot | tojson }}</script>
+
+<div class="chat-layout" id="chatApp">
+  <!-- 侧栏：对话列表 -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-head">
+      <button class="btn btn-accent w-100" id="btnNewConversation" type="button">
+        <i class="fa-solid fa-feather-pointed me-1"></i>新对话
+      </button>
+      <div class="search-box">
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <input type="search" id="convSearch" placeholder="搜索对话内容…" autocomplete="off" />
+      </div>
+    </div>
+    <div class="conv-list" id="conversationList"></div>
+    <div class="sidebar-foot">
+      <div class="token-title">TOKEN 用量</div>
+      <div class="token-row">
+        <div><span>本对话</span><b id="tokChat">0</b></div>
+        <div><span>本周</span><b id="tokWeek">0</b></div>
+        <div><span>本月</span><b id="tokMonth">0</b></div>
+        <div><span>累计</span><b id="tokTotal">0</b></div>
+      </div>
+    </div>
+  </aside>
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
+  <!-- 主区域 -->
+  <section class="chat-main" id="chatMain">
+    <header class="chat-topbar">
+      <div class="topbar-title">
+        <span id="currentConversationTitle" class="text-truncate" title="点击重命名">新对话</span>
+        <span id="personaBadge" class="persona-badge d-none"></span>
+      </div>
+      <div class="topbar-actions">
+        <select class="form-select form-select-sm model-select" id="modelSelect" title="选择模型"></select>
+        <button class="icon-btn" id="btnSettings" type="button" title="对话设置 / 人设"><i class="fa-solid fa-sliders"></i></button>
+        <button class="icon-btn" id="btnExport" type="button" title="导出为 Markdown"><i class="fa-solid fa-file-arrow-down"></i></button>
+        <button class="icon-btn danger" id="btnClear" type="button" title="清空本对话"><i class="fa-solid fa-broom"></i></button>
+      </div>
+    </header>
+
+    <div class="messages" id="chatBox"></div>
+
+    <footer class="composer" id="composer">
+      <div class="file-list" id="fileList"></div>
+      <div class="composer-box">
+        <textarea id="userInput" rows="1" placeholder="输入问题，Enter 发送，Shift+Enter 换行；可粘贴截图或拖入文件" autocomplete="off"></textarea>
+        <div class="composer-bar">
+          <div class="composer-tools">
+            <button class="tool-btn" id="btnAttach" type="button" title="上传文件（图片 / PDF / Word / Excel / 音视频 / 代码…）"><i class="fa-solid fa-paperclip"></i></button>
+            <span class="tool-sep chat-only"></span>
+            <button class="tool-btn toggle chat-only" data-tool="search" type="button" title="联网搜索（Google）"><i class="fa-solid fa-globe"></i><span>联网</span></button>
+            <button class="tool-btn toggle chat-only" data-tool="url" type="button" title="读取消息中的网页链接"><i class="fa-solid fa-link"></i><span>读网页</span></button>
+            <button class="tool-btn toggle chat-only" data-tool="code" type="button" title="允许模型运行 Python 代码做计算 / 画图"><i class="fa-solid fa-terminal"></i><span>代码</span></button>
+            <select class="tool-select chat-only" id="thinkingSelect" title="思考深度">
+              <option value="">思考：自动</option>
+              <option value="low">思考：快速</option>
+              <option value="medium">思考：标准</option>
+              <option value="high">思考：深度</option>
+            </select>
+            <button class="tool-btn toggle chat-only" id="memoryToggle" type="button" title="跨对话记忆"><i class="fa-solid fa-brain"></i><span>记忆</span></button>
+            <select class="tool-select image-only d-none" id="aspectSelect" title="画面比例"></select>
+          </div>
+          <div class="d-flex align-items-center gap-2">
+            <span class="char-count" id="charCount"></span>
+            <button class="send-btn" id="btnSend" type="button" title="发送"><i class="fa-solid fa-arrow-up"></i></button>
+            <button class="send-btn stop d-none" id="btnStop" type="button" title="停止生成"><i class="fa-solid fa-stop"></i></button>
+          </div>
+        </div>
+      </div>
+      <div class="composer-hint" id="hint"></div>
+      <input class="d-none" type="file" id="fileInput" multiple />
+    </footer>
+
+    <div class="drop-overlay d-none" id="dropOverlay"><div><i class="fa-solid fa-cloud-arrow-up"></i><p>松开即可上传</p></div></div>
+  </section>
+</div>
+
+<!-- 对话设置 -->
+<dialog class="app-dialog" id="settingsDialog">
+  <form method="dialog" class="dialog-body" id="settingsForm">
+    <h6 class="mb-3"><i class="fa-solid fa-sliders me-2"></i>对话设置</h6>
+    <label class="form-label small text-muted">标题</label>
+    <input class="form-control form-control-sm mb-3" id="settingsTitle" maxlength="80" />
+    <label class="form-label small text-muted">人设模板</label>
+    <div class="persona-grid mb-2" id="personaGrid"></div>
+    <label class="form-label small text-muted">系统提示词（本对话生效，模型会一直遵循）</label>
+    <textarea class="form-control form-control-sm" id="settingsPrompt" rows="7" maxlength="8000" placeholder="例如：你是一名资深外贸业务员，回答简洁，默认输出英文邮件草稿……"></textarea>
+    <div class="d-flex justify-content-end gap-2 mt-3">
+      <button class="btn btn-sm btn-ghost" value="cancel" type="submit">取消</button>
+      <button class="btn btn-sm btn-accent" value="save" id="settingsSave" type="submit">保存</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- OCR 结果 -->
+<dialog class="app-dialog ocr-dialog" id="ocrDialog">
+  <div class="dialog-body">
+    <h6 class="d-flex align-items-center gap-2 mb-1"><i class="fa-solid fa-font"></i>识别文字<span class="ocr-name" id="ocrName"></span></h6>
+    <div class="ocr-sub" id="ocrSub">正在识别…</div>
+    <div class="ocr-grid">
+      <div class="ocr-preview" id="ocrPreview"></div>
+      <textarea class="form-control ocr-text" id="ocrText" spellcheck="false" placeholder="识别中…"></textarea>
+    </div>
+    <div class="d-flex justify-content-between align-items-center gap-2 mt-3 flex-wrap">
+      <button class="btn btn-sm btn-ghost" id="ocrRetry" type="button"><i class="fa-solid fa-rotate-right me-1"></i>重新识别</button>
+      <div class="d-flex gap-2">
+        <button class="btn btn-sm btn-ghost" id="ocrCopy" type="button"><i class="fa-regular fa-copy me-1"></i>复制</button>
+        <button class="btn btn-sm btn-ghost" id="ocrInsert" type="button"><i class="fa-solid fa-arrow-turn-down me-1"></i>插入输入框</button>
+        <button class="btn btn-sm btn-accent" id="ocrClose" type="button">完成</button>
+      </div>
     </div>
   </div>
-</div>
+</dialog>
+
+<!-- 图片预览 -->
+<dialog class="app-dialog lightbox" id="lightbox">
+  <form method="dialog"><button class="icon-btn lightbox-close" type="submit"><i class="fa-solid fa-xmark"></i></button></form>
+  <img id="lightboxImg" alt="预览" />
+  <a class="btn btn-sm btn-accent lightbox-dl" id="lightboxDl" href="#"><i class="fa-solid fa-download me-1"></i>下载原图</a>
+</dialog>
 {% endblock %}

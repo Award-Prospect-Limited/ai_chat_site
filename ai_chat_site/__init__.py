@@ -45,7 +45,10 @@ def create_app() -> Flask:
 
     @login_manager.user_loader
     def _load_user(user_id: str):
-        return User.get(user_id)
+        user = User.get(user_id)
+        if user is None or user.disabled:
+            return None
+        return user
 
     init_db(app)
 
@@ -92,10 +95,18 @@ def create_app() -> Flask:
 
     from .routes.auth import bp as auth_bp
     from .routes.chat import bp as chat_bp
+    from .routes.admin import bp as admin_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(chat_bp)
+    app.register_blueprint(admin_bp)
+    # JSON API 靠 Origin/Referer 同源校验（见 _host_and_https_guards）+ SameSite Cookie 防 CSRF
     csrf.exempt(chat_bp)
+    csrf.exempt(admin_bp)
+
+    from .memory_service import start_backfill_thread
+
+    start_backfill_thread(app)
 
     # Ensure JSON CSRF header names are accepted (Flask-WTF default includes these)
     _ = csrf
