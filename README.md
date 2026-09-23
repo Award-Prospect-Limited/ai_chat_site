@@ -2,6 +2,24 @@
 
 一个独立可对外访问的网站（带注册/登录），后端对接 Gemini API，用于聊天。
 
+## 功能（v2）
+
+- 模型：Gemini 3.8 / 3.7 / 3.5 Flash、3.5 Flash-Lite、3.1 Pro、2.5 Pro/Flash；绘图 Nano Banana 2 / Pro（列表见 `ai_chat_site/model_catalog.py`）
+- 流式输出、停止生成、重新生成、编辑后重发；思考深度（快速 / 标准 / 深度）与思考摘要
+- 工具：联网搜索（附来源）、读取网页链接、代码执行
+- 文件：拖拽 / 粘贴 / 选择上传；PDF、图片、音视频原生理解；Word / Excel / PPT / 代码文本提取；图片与 PDF 一键 OCR
+- 绘图：文字生图、上传图片改图、多轮修改、画面比例
+- 对话：人设 / 系统提示词、置顶、全文搜索、导出 Markdown、自动标题、跨对话记忆（gemini-embedding-001）
+- 管理后台 `/admin`：用户、用量统计、邀请码（`ADMIN_USERNAMES` 配置管理员）
+- 深色 / 浅色主题，移动端适配
+
+## 本地开发
+
+- `python3.11 -m venv .venv && .venv/bin/pip install -r requirements.txt`
+- 新建 `.env.dev`（已在 .gitignore 中），至少包含 `AI_CHAT_SITE_SECRET_KEY`、`GEMINI_API_KEY`、`AI_CHAT_SITE_ALLOWED_HOSTS=localhost,127.0.0.1`、`FORCE_HTTPS=0`、`DATABASE_PATH=./data/dev.sqlite3`、`UPLOAD_DIR=./data/uploads`
+- 启动：`scripts/dev_local.sh`，访问 http://localhost:49193
+- 端到端测试（会真实调用 Gemini）：`set -a; source .env.dev; set +a; .venv/bin/python scripts/smoke_test.py`
+
 ## 快速启动（Docker Compose）
 
 1) 进入目录：
