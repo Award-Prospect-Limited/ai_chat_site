@@ -664,6 +664,8 @@ def api_chat_stream():
         used_model = model.id
         error = None
         stopped = False
+        # 先发 2KB 填充：部分企业网关 / 杀毒软件按大小缓冲，攒不满不转发
+        yield ":" + " " * 2048 + "\n\n"
         yield _sse({"type": "start", "user_message_id": user_message_id, "conversation_id": conversation_id,
                     "memory_used": bool(memory_snippets)})
         try:
@@ -756,18 +758,32 @@ def api_chat_stream():
                 yield _sse({"type": "title", "conversation_id": conversation_id, "title": title})
 
         if memory_enabled and model.kind == "chat" and not error:
-            for role, content, mid in (("user", msg, user_message_id), ("model", reply, model_message_id)):
-                remember_message(
-                    user_id=user_id, role=role, content=content, api_key=api_key,
-                    embed_model=embed_model, embed_dim=embed_dim,
-                    max_items=int(cfg.get("MEMORY_MAX_ITEMS") or 2000),
-                    source_conversation_id=conversation_id, source_message_id=mid,
-                )
+            # 写记忆要调两次向量接口，放到后台，流立即结束
+            threading.Thread(
+                target=_remember_in_background,
+                args=(app, user_id, api_key, embed_model, embed_dim, int(cfg.get("MEMORY_MAX_ITEMS") or 2000),
+                      conversation_id, ((("user", msg, user_message_id)), ("model", reply, model_message_id))),
+                name="memory-write",
+                daemon=True,
+            ).start()
 
     resp = Response(stream_with_context(generate()), mimetype="text/event-stream")
     resp.headers["Cache-Control"] = "no-cache, no-transform"
     resp.headers["X-Accel-Buffering"] = "no"
     return resp
+
+
+def _remember_in_background(app, user_id, api_key, embed_model, embed_dim, max_items, conversation_id, items):
+    with app.app_context():
+        for role, content, mid in items:
+            try:
+                remember_message(
+                    user_id=user_id, role=role, content=content, api_key=api_key,
+                    embed_model=embed_model, embed_dim=embed_dim, max_items=max_items,
+                    source_conversation_id=conversation_id, source_message_id=mid,
+                )
+            except Exception:  # noqa: BLE001
+                app.logger.warning("memory write failed", exc_info=True)
 
 
 def _friendly_error(e: Exception) -> str:

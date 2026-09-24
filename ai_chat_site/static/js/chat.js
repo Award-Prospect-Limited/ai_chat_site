@@ -682,6 +682,22 @@
     };
 
     let text_ = "";
+    let gotDone = false;
+    let lastByteAt = Date.now();
+    let bufferHintShown = false;
+    const ctrl = abortCtrl;
+    // 看门狗：网络中间层把流攒着不发时给出提示；长时间无任何数据（服务端每 10s 有心跳）则判定卡死
+    const watchdog = setInterval(() => {
+      const idle = Date.now() - lastByteAt;
+      if (!bufferHintShown && idle > 20000 && !gotContent && !thought) {
+        bufferHintShown = true;
+        setHint("回复生成中；如果你的网络会缓冲数据，完成后会一次性显示…");
+      }
+      if (idle > 120000) {
+        ctrl._stalled = true;
+        ctrl.abort();
+      }
+    }, 2000);
     let thought = "";
     let renderPending = false;
     let gotContent = false;
@@ -751,6 +767,7 @@
           aiRow._text = "";
           break;
         case "done":
+          gotDone = true;
           aiRow.dataset.id = ev.message_id;
           aiRow.querySelector(".model-tag").textContent = (modelById[ev.model] || {}).label || ev.model;
           setAiStamps(aiRow, ev.meta);
@@ -786,6 +803,7 @@
       for (;;) {
         const { value, done } = await reader.read();
         if (done) break;
+        lastByteAt = Date.now();
         buf += decoder.decode(value, { stream: true });
         let idx;
         while ((idx = buf.indexOf("\n\n")) >= 0) {
@@ -803,7 +821,9 @@
       }
     } catch (e) {
       stopWait();
-      if (e.name === "AbortError") {
+      if (e.name === "AbortError" && ctrl._stalled) {
+        body.innerHTML = '<span class="text-muted small">连接长时间无响应，正在从服务器同步…</span>';
+      } else if (e.name === "AbortError") {
         setHint("已停止生成");
         if (!text_ && !aiRow.querySelector(".gen-images img")) body.innerHTML = '<span class="text-muted small">（已停止）</span>';
         // 服务端会保存已生成的部分；稍后同步消息 ID，以便编辑 / 重新生成
@@ -812,6 +832,7 @@
         body.innerHTML = `<div class="error-note">⚠️ ${esc(e.message || "网络异常")}</div>`;
       }
     } finally {
+      clearInterval(watchdog);
       stopWait();
       body.classList.remove("typing-cursor");
       if (text_) window.MD.render(body, text_, { final: true });
@@ -822,11 +843,36 @@
       markLast();
       scrollToBottom(false);
       el.input.focus();
+      // 流被中间层截断（没收到 done，也不是用户主动停止）：回复多半已在服务端保存，去同步回来
+      if (!gotDone && !(ctrl._userStopped) && !body.querySelector(".error-note")) recoverFromServer(activeConversationId);
+      else if (gotDone && bufferHintShown) setHint("");
     }
   }
 
+  async function recoverFromServer(convId) {
+    setHint("连接中断，正在从服务器同步回复…");
+    for (let i = 0; i < 20; i++) {
+      await new Promise((r) => setTimeout(r, i === 0 ? 800 : 3000));
+      if (convId !== activeConversationId || busy) return;
+      try {
+        const data = await api(`/api/conversations/${convId}/messages`);
+        const list = data.messages || [];
+        const last = list[list.length - 1];
+        if (last && last.role === "model") {
+          await loadActiveConversation();
+          setHint("已从服务器同步回复");
+          return;
+        }
+      } catch (e) {}
+    }
+    setHint("没能同步到回复，请刷新页面或点「重新生成」", true);
+  }
+
   function stopGenerating() {
-    if (abortCtrl) abortCtrl.abort();
+    if (abortCtrl) {
+      abortCtrl._userStopped = true;
+      abortCtrl.abort();
+    }
   }
 
   function startEdit(row) {
