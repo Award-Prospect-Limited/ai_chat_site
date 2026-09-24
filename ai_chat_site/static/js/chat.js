@@ -531,7 +531,13 @@
     setSources(row, m.grounding);
     setAiStamps(row, m.meta);
     setAiMeta(row, m);
+    syncCopyButton(row);
     return row;
+  }
+
+  function syncCopyButton(row) {
+    const b = row.querySelector('.msg-actions [data-act="copy"]');
+    if (b) b.classList.toggle("d-none", !(row._text || "").trim());
   }
 
   function markLast() {
@@ -722,7 +728,9 @@
         case "start":
           if (userRow && ev.user_message_id) {
             userRow.dataset.id = ev.user_message_id;
-            userRow._msg = { id: ev.user_message_id, content: userRow._text, attachments: files };
+            // 重新生成时 files 为空，沿用该消息原有的附件，否则之后「编辑」会丢附件
+            const atts = isRegen ? (userRow._msg && userRow._msg.attachments) || [] : files;
+            userRow._msg = { id: ev.user_message_id, content: userRow._text, attachments: atts };
           }
           break;
         case "model":
@@ -826,8 +834,8 @@
       } else if (e.name === "AbortError") {
         setHint("已停止生成");
         if (!text_ && !aiRow.querySelector(".gen-images img")) body.innerHTML = '<span class="text-muted small">（已停止）</span>';
-        // 服务端会保存已生成的部分；稍后同步消息 ID，以便编辑 / 重新生成
-        setTimeout(() => loadActiveConversation().catch(() => {}), 800);
+        // 服务端在下一次写出（≤5s 心跳）时发现断开并保存已生成部分；等它存好再同步消息 ID
+        recoverFromServer(activeConversationId, { quiet: true });
       } else {
         body.innerHTML = `<div class="error-note">⚠️ ${esc(e.message || "网络异常")}</div>`;
       }
@@ -840,6 +848,7 @@
       if (!text_ && thought && !aiRow.querySelector(".gen-images img") && !body.querySelector(".error-note")) body.innerHTML = "";
       setBusy(false);
       abortCtrl = null;
+      syncCopyButton(aiRow);
       markLast();
       scrollToBottom(false);
       el.input.focus();
@@ -849,8 +858,9 @@
     }
   }
 
-  async function recoverFromServer(convId) {
-    setHint("连接中断，正在从服务器同步回复…");
+  async function recoverFromServer(convId, opts) {
+    const quiet = opts && opts.quiet;
+    if (!quiet) setHint("连接中断，正在从服务器同步回复…");
     for (let i = 0; i < 20; i++) {
       await new Promise((r) => setTimeout(r, i === 0 ? 800 : 3000));
       if (convId !== activeConversationId || busy) return;
@@ -860,7 +870,7 @@
         const last = list[list.length - 1];
         if (last && last.role === "model") {
           await loadActiveConversation();
-          setHint("已从服务器同步回复");
+          setHint(quiet ? "已停止生成" : "已从服务器同步回复");
           return;
         }
       } catch (e) {}

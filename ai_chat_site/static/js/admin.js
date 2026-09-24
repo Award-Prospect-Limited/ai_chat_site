@@ -122,14 +122,21 @@
       if (b.id === "btnInvite") {
         const r = await api("/api/admin/invites", "POST", { count: Number($("inviteCount").value) });
         await load();
-        if (navigator.clipboard && window.isSecureContext) {
+        // 异步请求之后部分浏览器（如 Safari）不允许写剪贴板；失败不影响生成结果
+        let copied = false;
+        try {
           await navigator.clipboard.writeText(r.codes.join("\n"));
-          b.innerHTML = '<i class="fa-solid fa-check me-1"></i>已复制到剪贴板';
-          setTimeout(() => (b.innerHTML = '<i class="fa-solid fa-plus me-1"></i>生成'), 1800);
-        }
+          copied = true;
+        } catch (e) {}
+        b.innerHTML = `<i class="fa-solid fa-check me-1"></i>${copied ? "已生成并复制" : `已生成 ${r.codes.length} 个`}`;
+        setTimeout(() => (b.innerHTML = '<i class="fa-solid fa-plus me-1"></i>生成'), 2000);
       } else if (b.dataset.copy) {
-        await navigator.clipboard.writeText(b.dataset.copy);
-        b.textContent = "已复制";
+        try {
+          await navigator.clipboard.writeText(b.dataset.copy);
+          b.textContent = "已复制";
+        } catch (err) {
+          window.prompt("复制失败，请手动复制：", b.dataset.copy);
+        }
       } else if (b.dataset.invite) {
         await api(`/api/admin/invites/${b.dataset.invite}`, "PATCH", { disabled: b.dataset.disabled === "1" });
         await load();

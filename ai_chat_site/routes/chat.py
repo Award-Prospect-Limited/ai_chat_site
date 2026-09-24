@@ -53,7 +53,7 @@ bp = Blueprint("chat", __name__)
 
 HISTORY_LIMIT = 40
 DEFAULT_TITLES = {"新对话", "默认对话"}
-KEEPALIVE_SECONDS = 10
+KEEPALIVE_SECONDS = 5
 MAX_REPLY_CHARS = 200_000
 
 
@@ -580,7 +580,7 @@ def api_chat_stream():
             return jsonify({"error": "没有可用模型"}), 500
         model = models[0]
 
-    thinking = data.get("thinking") if data.get("thinking") in THINKING_LEVELS else None
+    thinking = data.get("thinking") if data.get("thinking") in THINKING_LEVELS and model.thinking != "none" else None
     tools = {t for t in (data.get("tools") or []) if t in {"search", "url", "code"}} if model.tools else set()
     aspect = data.get("aspect_ratio") if data.get("aspect_ratio") in IMAGE_ASPECT_RATIOS else None
     memory_enabled = data.get("memory_enabled")

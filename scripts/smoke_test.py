@@ -77,7 +77,7 @@ g = next((e for e in ev if e["type"] == "grounding"), None)
 ok(g and g["sources"], "联网搜索带来源", f"{len(g['sources']) if g else 0} 条来源 {dt:.1f}s")
 
 # 3. 多轮上下文
-code, ev, dt = stream({"conversation_id": conv, "message": "我第一个问题问的是什么？只回答主题", "model": "gemini-3.5-flash-lite"})
+code, ev, dt = stream({"conversation_id": conv, "message": "我上一个问题问的是什么？只回答主题词", "model": "gemini-3.5-flash-lite"})
 ok("光合" in text_of(ev), "多轮上下文记忆", text_of(ev)[:40])
 
 # 4. 重新生成
