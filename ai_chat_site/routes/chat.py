@@ -552,6 +552,18 @@ def api_chat_stream():
     file_ids = parse_ids(data.get("file_ids") or [])
     truncate_from = int(data.get("truncate_from") or 0)
 
+    # 幂等：客户端每次发送带唯一 client_id，网络卡住自动重发时不会重复处理
+    client_id = str(data.get("client_id") or "")[:64]
+    if client_id and re.fullmatch(r"[A-Za-z0-9_-]{8,64}", client_id):
+        dup = db.execute(
+            "SELECT id FROM chat_messages WHERE user_id=? AND conversation_id=? AND role='user' AND meta_json LIKE ?",
+            (user_id, conversation_id, f'%"client_id": "{client_id}"%'),
+        ).fetchone()
+        if dup:
+            return jsonify({"status": "already_received", "user_message_id": int(dup["id"])}), 409
+    else:
+        client_id = ""
+
     if data.get("regenerate"):
         last_user = db.execute(
             "SELECT id, content, attachments_json FROM chat_messages WHERE user_id=? AND conversation_id=? AND role='user' ORDER BY id DESC LIMIT 1",
@@ -599,8 +611,9 @@ def api_chat_stream():
         )
 
     cur = db.execute(
-        "INSERT INTO chat_messages(user_id, conversation_id, role, content, model_name, attachments_json) VALUES(?,?,?,?,?,?)",
-        (user_id, conversation_id, "user", msg, model.id, json.dumps(file_ids) if file_ids else None),
+        "INSERT INTO chat_messages(user_id, conversation_id, role, content, model_name, attachments_json, meta_json) VALUES(?,?,?,?,?,?,?)",
+        (user_id, conversation_id, "user", msg, model.id, json.dumps(file_ids) if file_ids else None,
+         json.dumps({"client_id": client_id}) if client_id else None),
     )
     user_message_id = int(cur.lastrowid)
     db.execute("UPDATE users SET last_seen_at=CURRENT_TIMESTAMP WHERE id=?", (user_id,))

@@ -3,4 +3,4 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 set -a; source .env.dev; set +a
-exec .venv/bin/gunicorn --workers 1 --threads 16 --timeout 300 --bind 127.0.0.1:${PORT:-49193} "ai_chat_site.wsgi:app"
+exec .venv/bin/gunicorn --workers 1 --threads 16 --timeout 300 --access-logfile - --access-logformat '%(t)s "%(r)s" %(s)s %(M)sms' --bind 127.0.0.1:${PORT:-49193} "ai_chat_site.wsgi:app"

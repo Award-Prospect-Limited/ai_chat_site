@@ -30,3 +30,8 @@ services:
       - ADMIN_USERNAMES=${ADMIN_USERNAMES:-}
     volumes:
       - ./data:/data:rw
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"

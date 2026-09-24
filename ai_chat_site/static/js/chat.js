@@ -685,7 +685,13 @@
       aspect_ratio: m.kind === "image" ? el.aspect.value : null,
       regenerate: isRegen,
       truncate_from: opts.truncateFrom || null,
+      // 幂等编号：自动重发时沿用同一个，服务端据此识别重复请求
+      client_id: opts._clientId || newClientId(),
     };
+    const retryCount = opts._retry || 0;
+    const sentAt = Date.now();
+    let gotHeaders = false;
+    let needRetry = false;
 
     let text_ = "";
     let gotDone = false;
@@ -698,6 +704,11 @@
       if (!bufferHintShown && idle > 20000 && !gotContent && !thought) {
         bufferHintShown = true;
         setHint("回复生成中；如果你的网络会缓冲数据，完成后会一次性显示…");
+      }
+      // 服务端 1～2 秒内必定先回一段数据；25 秒没有任何响应头，说明请求卡在网络上
+      if (!gotHeaders && Date.now() - sentAt > 25000) {
+        ctrl._noResponse = true;
+        ctrl.abort();
       }
       if (idle > 120000) {
         ctrl._stalled = true;
@@ -796,6 +807,13 @@
         body: JSON.stringify(payload),
         signal: abortCtrl.signal,
       });
+      gotHeaders = true;
+      lastByteAt = Date.now();
+      if (res.status === 409) {
+        // 这条消息服务端已经收到（之前的请求其实到了），等它生成完同步回来
+        stopWait();
+        return;
+      }
       if (!res.ok || !res.body) {
         let msg = `请求失败（${res.status}）`;
         try {
@@ -829,7 +847,11 @@
       }
     } catch (e) {
       stopWait();
-      if (e.name === "AbortError" && ctrl._stalled) {
+      if (e.name === "AbortError" && ctrl._noResponse && retryCount < 1) {
+        needRetry = true;
+      } else if (e.name === "AbortError" && ctrl._noResponse) {
+        body.innerHTML = `<div class="error-note">⚠️ 连不上服务器（请求 25 秒没有响应，已自动重试一次）。可能是网络或代理不稳定，请稍后再试或刷新页面。</div>`;
+      } else if (e.name === "AbortError" && ctrl._stalled) {
         body.innerHTML = '<span class="text-muted small">连接长时间无响应，正在从服务器同步…</span>';
       } else if (e.name === "AbortError") {
         setHint("已停止生成");
@@ -849,13 +871,27 @@
       setBusy(false);
       abortCtrl = null;
       syncCopyButton(aiRow);
+      if (needRetry) {
+        // 撤掉这一轮的界面，用同一个 client_id 重发一次
+        aiRow.remove();
+        if (!isRegen && userRow) userRow.remove();
+        send({ ...opts, message: isRegen ? undefined : text, files, _retry: retryCount + 1, _clientId: payload.client_id });
+        setHint("网络没有响应，已自动重试…"); // send() 开头会清空提示，所以放在后面
+        return;
+      }
       markLast();
       scrollToBottom(false);
       el.input.focus();
       // 流被中间层截断（没收到 done，也不是用户主动停止）：回复多半已在服务端保存，去同步回来
       if (!gotDone && !(ctrl._userStopped) && !body.querySelector(".error-note")) recoverFromServer(activeConversationId);
-      else if (gotDone && bufferHintShown) setHint("");
+      else if (gotDone && (bufferHintShown || retryCount)) setHint("");
     }
+  }
+
+  function newClientId() {
+    const a = new Uint8Array(12);
+    (window.crypto || window.msCrypto).getRandomValues(a);
+    return Array.from(a, (b) => b.toString(16).padStart(2, "0")).join("");
   }
 
   async function recoverFromServer(convId, opts) {
