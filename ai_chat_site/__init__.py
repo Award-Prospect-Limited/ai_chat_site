@@ -93,6 +93,24 @@ def create_app() -> Flask:
     def healthz():
         return {"ok": True}
 
+    @app.get("/healthz/stream")
+    @limiter.limit("6 per minute")
+    def healthz_stream():
+        # 诊断反代 / CDN 是否缓冲流式响应：每秒推一条，客户端应逐条收到
+        import time
+
+        from flask import Response
+
+        def gen():
+            for i in range(5):
+                yield f"data: {i} {time.time():.1f}\n\n"
+                time.sleep(1)
+
+        resp = Response(gen(), mimetype="text/event-stream")
+        resp.headers["Cache-Control"] = "no-cache, no-transform"
+        resp.headers["X-Accel-Buffering"] = "no"
+        return resp
+
     from .routes.auth import bp as auth_bp
     from .routes.chat import bp as chat_bp
     from .routes.admin import bp as admin_bp
