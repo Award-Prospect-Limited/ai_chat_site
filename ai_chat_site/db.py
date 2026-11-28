@@ -30,6 +30,13 @@ def close_db(_e=None):
         db.close()
 
 
+def _add_columns(db: sqlite3.Connection, table: str, columns: dict[str, str]):
+    existing = {row[1] for row in db.execute(f"PRAGMA table_info({table})").fetchall()}
+    for name, ddl in columns.items():
+        if name not in existing:
+            db.execute(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}")
+
+
 def ensure_tables(db: sqlite3.Connection):
     db.execute(
         """
@@ -172,6 +179,35 @@ def ensure_tables(db: sqlite3.Connection):
         """
     )
     db.execute("CREATE INDEX IF NOT EXISTS idx_uploaded_files_user_id_id ON uploaded_files(user_id, id)")
+
+    # v2：只加列，不改不删，旧数据保持可读。
+    _add_columns(
+        db,
+        "users",
+        {"disabled": "INTEGER NOT NULL DEFAULT 0", "last_seen_at": "TEXT"},
+    )
+    _add_columns(
+        db,
+        "conversations",
+        {"system_prompt": "TEXT", "pinned": "INTEGER NOT NULL DEFAULT 0"},
+    )
+    _add_columns(
+        db,
+        "chat_messages",
+        {
+            # JSON 数组：本条消息关联的 uploaded_files.id（上传的附件或生成的图片）
+            "attachments_json": "TEXT",
+            "thoughts": "TEXT",
+            # JSON：{"queries": [...], "sources": [{"title","uri"}]}
+            "grounding_json": "TEXT",
+            # JSON：{"thinking": "...", "tools": [...], "elapsed_ms": ..., "aspect_ratio": ...}
+            "meta_json": "TEXT",
+            "thoughts_tokens": "INTEGER",
+        },
+    )
+    _add_columns(db, "uploaded_files", {"source": "TEXT NOT NULL DEFAULT 'upload'", "ocr_text": "TEXT"})
+    _add_columns(db, "memory_items", {"embed_model": "TEXT"})
+    db.execute("CREATE INDEX IF NOT EXISTS idx_chat_messages_created ON chat_messages(created_at)")
 
     # Backfill: ensure each existing user has at least one conversation and old messages are linked.
     user_rows = db.execute("SELECT id FROM users").fetchall()

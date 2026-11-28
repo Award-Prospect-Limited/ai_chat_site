@@ -242,6 +242,9 @@ def login():
             _record_failure(identifier)
             flash("账号或密码错误", "danger")
             return redirect(url_for("auth.login"))
+        if user.disabled:
+            flash("账号已被停用，请联系管理员", "danger")
+            return redirect(url_for("auth.login"))
 
         _clear_lockout(identifier)
         session.clear()
