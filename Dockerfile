@@ -18,6 +18,9 @@ ARG PIP_INDEX_URL=https://pypi.org/simple
 # 基础镜像自带的 pip / setuptools 版本旧、有已修复的高危漏洞，先升到最新
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 RUN pip install --no-cache-dir -r /app/requirements.txt
+# 运行时用不到 pip，装完依赖就卸掉：新版 pip 自带的清单（pip/_vendor/bom.cdx.json）里记着它内嵌的 setuptools 70.3.0，
+# 镜像扫描会按 CVE-2025-47273 报高危；卸掉也少一个能在容器里装东西的工具。要在容器里临时装包时用 python -m ensurepip 找回。
+RUN python -m pip uninstall -y pip
 
 COPY ai_chat_site /app/ai_chat_site
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh
