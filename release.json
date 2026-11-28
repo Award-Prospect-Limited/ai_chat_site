@@ -1,0 +1,14 @@
+{
+  "project": "ai_chat_site",
+  "image": "ai-chat-site",
+  "service": "ai-chat-site",
+  "tagVar": "APP_TAG",
+  "buildArgs": { "PIP_INDEX_URL": "https://pypi.tuna.tsinghua.edu.cn/simple" },
+  "migrate": null,
+  "backup": null,
+  "health": { "url": "http://127.0.0.1:49193/healthz", "expect": "\"db\":\"ok\"", "timeoutSec": 90 },
+  "requiredCi": [],
+  "money": false,
+  "invariants": null,
+  "probe": { "url": "https://gemini.awardprospect.com", "protected": ["/chat", "/admin", "/api/conversations"] }
+}

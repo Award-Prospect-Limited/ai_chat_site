@@ -9,7 +9,7 @@ from flask_limiter.util import get_remote_address
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from .config import Config
-from .db import init_app as init_db
+from .db import get_db, init_app as init_db
 from .models import User
 from .security import apply_security_headers, is_allowed_host
 
@@ -54,6 +54,11 @@ def create_app() -> Flask:
 
     @app.before_request
     def _host_and_https_guards():
+        # /healthz 给服务器本机的发布脚本和巡检用（http://127.0.0.1:端口/healthz，不经 Cloudflare）：
+        # 不做域名白名单和 https 跳转，否则本机探测永远是 400 / 302。它只回固定字段，不含任何用户数据。
+        if request.path == "/healthz":
+            return None
+
         host = request.host.split(":", 1)[0].strip().lower()
         if not is_allowed_host(host, app.config.get("ALLOWED_HOSTS", [])):
             abort(400)
@@ -91,7 +96,13 @@ def create_app() -> Flask:
 
     @app.get("/healthz")
     def healthz():
-        return {"ok": True}
+        # 应用能响应 + 数据库能查询才算健康；commit 是镜像构建时写入的提交号（发布后核对版本用）
+        try:
+            get_db().execute("SELECT 1").fetchone()
+        except Exception:  # noqa: BLE001
+            app.logger.exception("healthz: 数据库查询失败")
+            return {"ok": False, "db": "error"}, 503
+        return {"ok": True, "db": "ok", "commit": (os.getenv("APP_COMMIT") or "")[:7]}
 
     @app.get("/healthz/stream")
     @limiter.limit("6 per minute")

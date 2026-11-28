@@ -77,6 +77,18 @@ def main() -> int:
         print("失败：/healthz 没有返回 200")
         return 1
 
+    if '"db":"ok"' not in health.get_data(as_text=True).replace(" ", ""):
+        print("失败：/healthz 没有报数据库正常")
+        return 1
+
+    # 服务器本机探测（发布脚本用 http://127.0.0.1:49193/healthz）：域名不在白名单里也要能通；别的路径照样拒绝
+    local = app.test_client().get("/healthz", base_url="http://127.0.0.1:49193")
+    guarded = app.test_client().get(login_url, base_url="http://127.0.0.1:49193")
+    print(f"本机地址探测：/healthz {local.status_code}，登录页 {guarded.status_code}")
+    if local.status_code != 200 or guarded.status_code != 400:
+        print("失败：/healthz 应对本机地址放行（200），其它路径对白名单外的域名应拒绝（400）")
+        return 1
+
     # extract_text 出错时要写日志（current_app.logger），所以放在应用上下文里跑
     ctx = app.app_context()
     ctx.push()
