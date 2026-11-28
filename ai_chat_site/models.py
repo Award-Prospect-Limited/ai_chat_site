@@ -2,6 +2,7 @@ import re
 from dataclasses import dataclass
 
 from email_validator import validate_email, EmailNotValidError
+from flask import current_app
 from flask_login import UserMixin
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -17,6 +18,12 @@ class User(UserMixin):
     username: str
     email: str
     password_hash: str
+    disabled: bool = False
+
+    @property
+    def is_admin(self) -> bool:
+        admins = current_app.config.get("ADMIN_USERNAMES") or []
+        return self.username.lower() in admins
 
     @staticmethod
     def get(user_id: str | int):
@@ -67,5 +74,6 @@ class User(UserMixin):
             username=str(row["username"]),
             email=str(row["email"]),
             password_hash=str(row["password_hash"]),
+            disabled=bool(row["disabled"]) if "disabled" in row.keys() else False,
         )
 

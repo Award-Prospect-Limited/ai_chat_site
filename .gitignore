@@ -4,3 +4,5 @@ __pycache__/
 .data/
 data/
 .DS_Store
+.venv/
+.env.dev

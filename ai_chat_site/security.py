@@ -26,12 +26,13 @@ def apply_security_headers(resp: Response, cfg: dict) -> Response:
     # CSP: no inline scripts; allow CDN CSS/fonts for Bootstrap/FontAwesome.
     # If Turnstile is enabled, allow challenges.cloudflare.com.
     turnstile_enabled = bool(cfg.get("TURNSTILE_SITE_KEY") and cfg.get("TURNSTILE_SECRET_KEY"))
-    script_src = "script-src 'self'; "
+    # cdn.jsdelivr.net：marked / DOMPurify / highlight.js / KaTeX（版本已固定在模板里）
+    script_src = "script-src 'self' https://cdn.jsdelivr.net; "
     frame_src = ""
     connect_src = "connect-src 'self'; "
 
     if turnstile_enabled:
-        script_src = "script-src 'self' https://challenges.cloudflare.com; "
+        script_src = "script-src 'self' https://cdn.jsdelivr.net https://challenges.cloudflare.com; "
         frame_src = "frame-src https://challenges.cloudflare.com; "
         connect_src = "connect-src 'self' https://challenges.cloudflare.com; "
 
@@ -42,9 +43,10 @@ def apply_security_headers(resp: Response, cfg: dict) -> Response:
         "frame-ancestors 'none'; "
         "object-src 'none'; "
         f"{script_src}"
-        "style-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; "
-        "font-src 'self' https://cdnjs.cloudflare.com data:; "
-        "img-src 'self' data:; "
+        # KaTeX 公式渲染依赖 style 属性，只能对样式放开 'unsafe-inline'（脚本仍然严格）
+        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com; "
+        "font-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://fonts.gstatic.com data:; "
+        "img-src 'self' data: blob:; "
         f"{connect_src}"
         f"{frame_src}"
     )

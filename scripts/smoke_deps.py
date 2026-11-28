@@ -1,4 +1,4 @@
-"""依赖升级后的最小冒烟：应用能导入并启动、登录页能打开、pypdf 能从 PDF 里取出文字。
+"""依赖升级后的最小冒烟：应用能导入并启动、登录页和 /healthz 能打开、pypdf / openpyxl 能从文件里取出文字。
 
 用法（在仓库根目录）：python scripts/smoke_deps.py
 镜像里：docker run --rm -i --entrypoint python <镜像> - < scripts/smoke_deps.py
@@ -40,7 +40,7 @@ def build_pdf(text: str) -> bytes:
 
 
 def main() -> int:
-    for name in ("flask", "gunicorn", "pypdf", "requests", "python-dotenv", "python-docx", "google-genai"):
+    for name in ("flask", "gunicorn", "pypdf", "requests", "python-dotenv", "python-docx", "google-genai", "openpyxl", "python-pptx"):
         print(f"{name} {version(name)}")
 
     workdir = tempfile.mkdtemp(prefix="ai_chat_smoke_")
@@ -55,7 +55,7 @@ def main() -> int:
     )
 
     from ai_chat_site import create_app
-    from ai_chat_site.routes.chat import _extract_text_from_bytes
+    from ai_chat_site.files_service import extract_text
 
     app = create_app()
     login_url = None
@@ -71,18 +71,42 @@ def main() -> int:
         print("失败：登录页没有返回 200")
         return 1
 
+    health = app.test_client().get("/healthz", base_url="http://localhost")
+    print(f"/healthz 返回 {health.status_code} {health.get_data(as_text=True).strip()}")
+    if health.status_code != 200:
+        print("失败：/healthz 没有返回 200")
+        return 1
+
+    # extract_text 出错时要写日志（current_app.logger），所以放在应用上下文里跑
+    ctx = app.app_context()
+    ctx.push()
+
     pdf = build_pdf("Hello smoke 20261127")
-    text = _extract_text_from_bytes(pdf, "smoke.pdf", "application/pdf")
+    text = extract_text(pdf, "smoke.pdf", "application/pdf")
     print(f"PDF 提取结果：{text!r}")
     if "Hello smoke 20261127" not in text:
         print("失败：没有从 PDF 里取出预期文字")
         return 1
 
     # 损坏的 PDF 应该被吞掉返回空串，不能把异常抛给上传接口
-    broken = _extract_text_from_bytes(b"%PDF-1.4\nnot a pdf", "broken.pdf", "application/pdf")
+    broken = extract_text(b"%PDF-1.4\nnot a pdf", "broken.pdf", "application/pdf")
     print(f"损坏 PDF 提取结果：{broken!r}")
     if broken != "":
         print("失败：损坏的 PDF 没有返回空串")
+        return 1
+
+    import io
+
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    wb.active.append(["smoke", 20261128])
+    buf = io.BytesIO()
+    wb.save(buf)
+    sheet = extract_text(buf.getvalue(), "smoke.xlsx", None)
+    print(f"xlsx 提取结果：{sheet!r}")
+    if "smoke,20261128" not in sheet:
+        print("失败：没有从 xlsx 里取出预期内容")
         return 1
 
     print("冒烟通过")
